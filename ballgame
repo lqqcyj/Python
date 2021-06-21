@@ -1,0 +1,249 @@
+import pygame,sys,random
+from pygame import *
+
+pygame.init()
+
+side=[700,700]
+screen=pygame.display.set_mode(side)
+#screen_rect=screen.get_rect()
+pygame.display.set_caption("BallGame")
+icon_image=pygame.image.load("images/icon.png")
+pygame.display.set_icon(icon_image)
+bg_image=pygame.image.load("images/b3.png").convert_alpha()
+pygame.mixer.music.load("music/Solstice.mp3")
+pygame.mixer.music.play()
+disapear_sound=pygame.mixer.Sound("music/popo.mp3")
+gameover=pygame.mixer.Sound("music/gameover.mp3")
+clock=pygame.time.Clock()
+
+class Human():
+    def __init__(self):
+        self.image=pygame.image.load("images/Bg.png").convert_alpha()
+        self.rect=self.image.get_rect()
+        self.rect.left=212
+        self.rect.top=560
+    def moveLeft(self):
+        if self.rect.left>27:
+            self.rect.left-=65
+    def moveRight(self):
+        if self.rect.left<=547:
+            self.rect.left+=65
+human=Human()
+
+
+ballNum=[1,2,3,4,5]
+bList=[]
+for i in range(1100):
+    i=random.choice(ballNum)    # 随机，即使每次开始游戏时初始圆的排列不同+10
+    bList.append(i)          
+
+info=[]   
+def InitBalls(topline,bottomLine):
+    index=0
+    for row in range(27,613,65):
+        Col=[]     
+        for col in range(topline,bottomLine,65): 
+            i=bList[index]
+            ballFile="images/virus/%d.png"%i
+            Balls=pygame.image.load(ballFile).convert_alpha()
+            screen.blit(Balls,(row,col))
+            Col.append([row,col,Balls])
+            index+=1
+        info.append(Col)
+
+
+
+TopLine=-65*100
+BottomLine=196
+InitBalls(TopLine,BottomLine)
+
+first_balls=[]
+for i in range(10): 
+    first_balls.append(info[i][-1])          
+
+def UpdateBall():
+    for i in info:
+        for j in i:
+            screen.blit(j[2],(j[0],j[1]))
+
+def simpos2relpos(L):
+    res = []
+    for i in L:
+        res.append([i[0]*65+27,(i[1]-10)*65])
+    return res
+def check_disappear(pos,color):
+    global myscore
+    pos_list = [[0 for i in range(100)] for j in range(10)]
+    for i in info:
+        for j in i:
+            x,y,c = j
+            x = (x-27)//65
+            y = (y//65)+10
+            pos_list[x][y] = c
+    x,y = pos
+    x = (x-27)//65
+    y = (y//65)+10
+    can_list = [[x,y],]
+    have_visit = [[x,y],]
+    while can_list:
+        x,y = can_list.pop(0)
+        for dx in [-1,0,1]:
+            for dy in [-1,0,1]:
+                nx = x+dx
+                ny = y+dy
+                if (not (9>=nx>=0 and 20>=ny>=0)) or (nx==0 and ny==0):
+                    continue
+                if dx!=0 and dy!=0:
+                    continue
+                if type(pos_list[nx][ny])!=int and (pos_list[nx][ny].get_at((22,22))==color.get_at((22,22)) and [nx,ny] not in have_visit):
+                    can_list.append([nx,ny])
+                    have_visit.append([nx,ny])
+    if len(have_visit)>=3:
+        del_pos = simpos2relpos(have_visit)
+        for i in info:
+            for j in i[::-1]:
+                if [j[0],j[1]] in del_pos:
+                    i.remove(j)
+                    myscore+=1
+                    disapear_sound.play()
+
+        for i in range(len(info)):
+            for j in range(1,len(info[i])):
+                if info[i][j][1]-info[i][j-1][1]>65:
+                    info[i][j][1]=info[i][j-1][1]+65
+        UpdateBall()
+        for i in range(10): 
+            first_balls[i]=info[i][-1]    
+
+isTakingBall=False
+throw=False
+class MoveBall():
+    def __init__(self):      
+        self.row=human.rect.left//65  #范围0-9,表示列数
+        self.col=first_balls[self.row][1]  #即top的大小
+        self.image=first_balls[self.row][2]        
+        self.pos=self.image.get_rect()
+    def TakeDown(self):
+        global isTakingBall,throw,first_balls,info    
+        if isTakingBall==False:            
+            self.pos.top=human.rect.top+20        
+            self.pos.left=human.rect.left+10 
+            screen.blit(self.image,self.pos)       
+            isTakingBall=True 
+            info[self.row].pop(-1)
+            first_balls[self.row]=info[self.row][-1]       
+            UpdateBall()
+    def moveLeft(self):
+        if self.pos.left>27:
+            self.pos.left-=65
+    def moveRight(self):
+        if self.pos.left<612:
+            self.pos.left+=65
+    def ThrowUp(self):
+        global isTakingBall,throw,first_balls,info
+        if isTakingBall==True: 
+            e=human.rect.left           
+            self.pos.top=first_balls[e//65][1]+65            
+            screen.blit(self.image,self.pos)
+            info[e//65].append([e+10,self.pos.top,self.image])
+            first_balls[e//65]=info[e//65][-1]
+            isTakingBall=False
+            throw=True
+            check_disappear([e+10,self.pos.top],self.image)
+            UpdateBall()
+
+
+#文字
+myscore=0
+score_font=pygame.font.Font("fron/Inkfree.ttf",40)
+game_over=pygame.font.Font("fron/impact.ttf",60)
+final_score=pygame.font.Font("fron/impact.ttf",40)
+
+delay=100000 
+Game_Over=False
+
+while True:     
+    delay-=1
+    if delay%200==0:   #延迟，使圆整行下降
+        for i in range(10):            
+            for j in range(len(info[i])):
+                info[i][j][1]+=65
+        for i in range(10): 
+            first_balls.append(info[i][-1])     
+
+    screen.blit(bg_image,(0,0))   #背景图片
+    screen.blit(human.image,human.rect)  #小人图片
+    
+    for i in first_balls:
+        if i[1]>=580:
+            Game_Over=True
+            
+    
+    # 检测事件
+    for event in pygame.event.get():
+        if event.type==pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type==pygame.KEYDOWN:
+            
+            if event.key==pygame.K_ESCAPE: # 按ESC退出
+                pygame.quit()
+                sys.exit()
+            
+            if event.key==pygame.K_LEFT or event.key==pygame.K_a: #左移
+                human.moveLeft()                
+                if isTakingBall==True:
+                    moveball.moveLeft()
+               
+            if event.key==pygame.K_RIGHT or event.key==pygame.K_d: #右移
+                human.moveRight()                
+                if isTakingBall==True:
+                    moveball.moveRight()
+            
+            if event.key==pygame.K_DOWN or event.key==pygame.K_s:       #取球         
+                moveball=MoveBall()                                    
+                if isTakingBall==False:                    
+                    moveball.TakeDown()                                                         
+                    isTakingBall=True
+                    
+                
+            if event.key==pygame.K_UP or event.key==pygame.K_w:     #抛球
+                if isTakingBall==True: 
+                    moveball.ThrowUp()                                                                           
+                    isTakingBall=False
+                    throw=True
+                
+
+      
+    if isTakingBall==True:
+        screen.blit(moveball.image,(human.rect.left+10,human.rect.top+20))
+
+    UpdateBall()
+    
+    #左下角显示分数
+    score_font.set_bold(True)   #分数字体加粗
+    score_text=score_font.render("Score : %s" % str(myscore),True,(0,0,0))
+    screen.blit(score_text,(50,650)) 
+
+    #显示游戏结束   
+    if Game_Over==True:
+        #pygame.mixer.music.stop()
+        #game_over.play()
+        
+        over=game_over.render("Game Over!" ,True,(0,0,0))
+        scores=final_score.render("Your Scores : %s" % str(myscore),True,(0,0,0))
+        
+        screen.blit(over,(200,300))
+        screen.blit(scores,(200,380))
+        delay+=90
+        if delay%100==0:
+            pygame.mixer.music.stop()            
+            gameover.play()
+            pygame.time.wait(3000)
+            break        
+        
+                
+
+    pygame.display.update()
+    clock.tick(30)
+
